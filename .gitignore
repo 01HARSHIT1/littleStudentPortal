@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build
+dist/
+build/
+client/dist/
+
+# Env / secrets
+.env
+server/.env
+*.pem
+
+# Logs & OS
+logs/
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Uploads / temp
+uploads/
+tmp/
+.cache/
