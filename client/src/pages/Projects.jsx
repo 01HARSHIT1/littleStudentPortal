@@ -13,24 +13,35 @@ const TASK_STATUSES = ['To Do', 'In Progress', 'Review', 'Completed', 'Blocked']
 
 export default function Projects() {
   const { hasRole } = useAuth()
+  const isSuperAdmin = hasRole('SUPER_ADMIN')
   const canProject = hasRole('SUPER_ADMIN', 'ORG_ADMIN', 'MANAGER', 'TEAM_LEAD')
   const canTask = hasRole('SUPER_ADMIN', 'ORG_ADMIN', 'MANAGER', 'TEAM_LEAD', 'EMPLOYEE')
   const [projects, setProjects] = useState([])
   const [tasks, setTasks] = useState([])
+  const [organizations, setOrganizations] = useState([])
   const [selected, setSelected] = useState(null)
   const [loading, setLoading] = useState(true)
   const [projOpen, setProjOpen] = useState(false)
   const [taskOpen, setTaskOpen] = useState(false)
-  const [projForm, setProjForm] = useState({ name: '', description: '', status: 'Planning' })
+  const [projForm, setProjForm] = useState({ name: '', description: '', status: 'Planning', organization: '' })
   const [taskForm, setTaskForm] = useState({ title: '', description: '', priority: 'Medium', status: 'To Do', project: '' })
 
   const load = async () => {
     setLoading(true)
     try {
-      const [p, t] = await Promise.all([api.get('/projects'), api.get('/projects/tasks')])
+      const requests = [api.get('/projects'), api.get('/projects/tasks')]
+      if (isSuperAdmin) requests.push(api.get('/organizations'))
+      const [p, t, orgRes] = await Promise.all(requests)
       const plist = asList(p.data?.data ?? p.data)
       setProjects(plist)
       setTasks(asList(t.data?.data ?? t.data))
+      if (isSuperAdmin) {
+        const orgList = asList(orgRes?.data?.data ?? orgRes?.data)
+        setOrganizations(orgList)
+        if (!projForm.organization && orgList[0]?._id) {
+          setProjForm((prev) => ({ ...prev, organization: orgList[0]._id }))
+        }
+      }
       if (!selected && plist[0]) setSelected(plist[0]._id)
     } catch (err) {
       toast(getErrorMessage(err), 'error')
@@ -51,7 +62,13 @@ export default function Projects() {
   const createProject = async (e) => {
     e.preventDefault()
     try {
-      await api.post('/projects', projForm)
+      const payload = { ...projForm }
+      if (!isSuperAdmin) delete payload.organization
+      if (isSuperAdmin && !payload.organization) {
+        toast('Please select an organization', 'error')
+        return
+      }
+      await api.post('/projects', payload)
       toast('Project created', 'success')
       setProjOpen(false)
       load()
@@ -100,7 +117,19 @@ export default function Projects() {
             </button>
           )}
           {canProject && (
-            <button type="button" className="btn btn-primary" onClick={() => setProjOpen(true)}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                setProjForm({
+                  name: '',
+                  description: '',
+                  status: 'Planning',
+                  organization: isSuperAdmin ? organizations[0]?._id || '' : '',
+                })
+                setProjOpen(true)
+              }}
+            >
               <Plus size={16} /> Project
             </button>
           )}
@@ -182,6 +211,24 @@ export default function Projects() {
               {['Planning', 'Active', 'On Hold', 'Completed', 'Cancelled'].map((s) => <option key={s}>{s}</option>)}
             </select>
           </div>
+          {isSuperAdmin && (
+            <div className="form-group">
+              <label>Organization</label>
+              <select
+                className="form-control"
+                required
+                value={projForm.organization}
+                onChange={(e) => setProjForm({ ...projForm, organization: e.target.value })}
+              >
+                <option value="">Select…</option>
+                {organizations.map((org) => (
+                  <option key={org._id} value={org._id}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </form>
       </Modal>
 

@@ -1,5 +1,6 @@
 const Project = require('../models/Project');
 const Task = require('../models/Task');
+const Organization = require('../models/Organization');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { ROLES } = require('../config/roles');
@@ -9,10 +10,24 @@ const orgFilter = (user) => {
   return { organization: user.organization };
 };
 
+const resolveOrganizationId = async (req) => {
+  if (req.body.organization) return req.body.organization;
+  if (req.user.organization) return req.user.organization;
+
+  // Super admin is global and may not be scoped to one org; default to first org.
+  if (req.user.role === ROLES.SUPER_ADMIN) {
+    const firstOrg = await Organization.findOne({}, { _id: 1 }).sort({ createdAt: 1 });
+    if (firstOrg?._id) return firstOrg._id;
+  }
+
+  throw new ApiError(400, 'Organization is required to create a project');
+};
+
 const createProject = asyncHandler(async (req, res) => {
+  const organizationId = await resolveOrganizationId(req);
   const project = await Project.create({
     ...req.body,
-    organization: req.body.organization || req.user.organization,
+    organization: organizationId,
   });
   const populated = await Project.findById(project._id)
     .populate('manager', 'employeeId personal')
